@@ -103,19 +103,40 @@ before extending this codebase:
   system prices, averaged across the day). Refreshed on a schedule
   (`MARKET_REFRESH_CRON`, default every 30 minutes) and cached in
   `market_observations`.
+- **Gas price** is also live for 2026, pulled from National Gas
+  Transmission's public Gas Data Portal (`src/data/nationalgas.ts`) — the
+  System Average Price (SAP), hourly actual, which is the day-ahead gas
+  price equivalent to Elexon's electricity settlement prices. No API key
+  needed: it's the same unauthenticated CSV download endpoint
+  (`/api/find-gas-data-download`) the portal's own UI uses. Published
+  values are p/kWh and converted to £/MWh (×10) to match the pricing
+  engine's existing gas price unit. SAP is published roughly a day behind
+  the gas day it covers — see the freshness note below.
 - **Carbon price** has a connector stub (`src/data/ukets.ts`) that only
   activates if `UKETS_AUCTION_URL` is configured, because UK ETS auction/
   secondary-market pricing has no free structured API — it sits behind
   licensed feeds (ICE's UK ETS auction platform, or vendors like
   Argus/ICIS). Until your org has one of those, carbon stays curated. This
   is intentional, not unfinished.
-- **Gas price and nuclear PPA price** are always curated — NBP gas pricing
-  at this granularity is also a licensed-data question, and nuclear PPA
-  has no market feed at all, live or otherwise.
+- **Nuclear PPA price** is always curated — it has no market feed at all,
+  live or otherwise.
 - **2030/2035/2040/2046 are always curated**, regardless of any of the
   above — they're forward scenarios by definition, not something a live
   feed could ever populate. Only `LIVE_ELIGIBLE_YEAR` (2026) in
   `src/data/marketData.ts` can ever resolve to a live value.
+
+**Freshness check: `fetched_at`, not `observed_at`** — `getLatestObservation()`
+in `src/data/marketData.ts` decides whether a cached observation still counts
+as "live" by checking how long ago it was *fetched* (`fetched_at`), not how
+old the price data it covers is (`observed_at`). This matters because sources
+like SAP publish a day behind by design — `observed_at` for a successfully,
+recently-fetched gas price is *always* going to be roughly a day old, which is
+normal publication lag, not staleness. Filtering on `observed_at` instead
+(an earlier version of this code did, with a 36-hour window) meant a
+just-fetched gas price could still fail the freshness check and silently fall
+back to "curated" with no error anywhere — the connector logs would show a
+successful fetch while the API kept reporting `"source": "curated"`. If you
+add a new live connector, filter on `fetched_at`.
 
 **Versioned, audited assumptions** (`src/pricing/assumptionsStore.ts`):
 every capex curve, efficiency curve, and delivery-point adder — the numbers

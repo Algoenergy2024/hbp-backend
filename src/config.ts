@@ -17,6 +17,7 @@ export const config = {
   jwtSecret: required("JWT_SECRET"),
   jwtExpiry: process.env.JWT_EXPIRY ?? "7d",
   elexonBaseUrl: process.env.ELEXON_BMRS_BASE_URL ?? "https://data.elexon.co.uk/bmrs/api/v1",
+  nationalGasBaseUrl: process.env.NATIONALGAS_BASE_URL ?? "https://data.nationalgas.com",
   ukEtsAuctionUrl: process.env.UKETS_AUCTION_URL ?? "",
   marketRefreshCron: process.env.MARKET_REFRESH_CRON ?? "*/30 * * * *"
 };

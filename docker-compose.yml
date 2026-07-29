@@ -29,6 +29,7 @@ services:
       JWT_SECRET: change-me-to-a-long-random-string
       JWT_EXPIRY: 7d
       ELEXON_BMRS_BASE_URL: https://data.elexon.co.uk/bmrs/api/v1
+      NATIONALGAS_BASE_URL: https://data.nationalgas.com
       UKETS_AUCTION_URL: ""
       MARKET_REFRESH_CRON: "*/30 * * * *"
     ports:

@@ -721,6 +721,8 @@
     img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgData);
   });
 
+  document.getElementById("recordAuctionBtn").addEventListener("click", recordAuctionResult);
+
   // ---------------- Project stress test (per-project tornado + heatmap) ----------------
 
   var HEATMAP_STEPS = [-0.4, -0.2, 0, 0.2, 0.4];
@@ -899,9 +901,45 @@
     return n;
   }
 
+  var MARKET_SERIES_LABELS = { gasPrice: "Gas", gridElec: "Grid electricity", nuclearPPA: "Nuclear PPA", carbonPrice: "Carbon (UK ETS)" };
+
+  function renderMarketDataStatus() {
+    var list = document.getElementById("marketDataStatus");
+    var recordBtn = document.getElementById("recordAuctionBtn");
+    recordBtn.hidden = !(state.user && state.user.isAdmin);
+
+    api("/api/market?year=2026").then(function (data) {
+      list.innerHTML = "";
+      Object.keys(MARKET_SERIES_LABELS).forEach(function (key) {
+        var li = document.createElement("li");
+        var isLive = data.sources[key] && data.sources[key].indexOf("live") === 0;
+        li.textContent = MARKET_SERIES_LABELS[key] + ": " + money(data.prices[key]) +
+          " (" + (isLive ? data.sources[key] : "curated") + ")";
+        list.appendChild(li);
+      });
+    }).catch(function () { list.innerHTML = "<li>Could not load market data.</li>"; });
+  }
+
+  function recordAuctionResult() {
+    var date = window.prompt("Auction date the price applies to (YYYY-MM-DD):");
+    if (!date) return;
+    var rawPrice = window.prompt("Clearing price (£ per allowance / tCO2e), e.g. 59.26:");
+    if (rawPrice === null) return;
+    var price = Number(rawPrice);
+    if (Number.isNaN(price) || price <= 0) { window.alert("That doesn't look like a valid price."); return; }
+
+    api("/api/market/carbon-auction", {
+      method: "POST",
+      body: JSON.stringify({ date: date, clearingPrice: price })
+    })
+      .then(function () { renderMarketDataStatus(); })
+      .catch(function (err) { window.alert(err.message); });
+  }
+
   function renderAssumptions() {
     var errorEl = document.getElementById("assumptionsError");
     errorEl.textContent = "";
+    renderMarketDataStatus();
     api("/api/assumptions").then(function (data) {
       var byKey = {};
       data.assumptions.forEach(function (row) {

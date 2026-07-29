@@ -165,6 +165,12 @@
       </section>
 
       <section id="panel-assumptions" hidden>
+        <div class="card" id="marketDataCard" style="margin-bottom:16px;">
+          <p class="card-title">Live market data</p>
+          <p class="card-sub">What's actually live right now (2026 scenario year) vs curated — see the API for the full picture.</p>
+          <ul id="marketDataStatus" style="margin:8px 0; padding-left:18px;"></ul>
+          <button id="recordAuctionBtn" type="button" class="history-btn" hidden>+ Record UK ETS auction result</button>
+        </div>
         <div class="card">
           <p class="card-title">Curated assumptions</p>
           <p class="card-sub" id="assumptionsSub">Every capex curve, efficiency curve, and delivery-point adder driving the pricing engine — versioned, and visible to anyone.</p>

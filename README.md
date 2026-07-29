@@ -78,6 +78,7 @@ port before it reaches an API response.
 | `GET /api/pathways/:pathway/sensitivity?year=&clusterId=&electrolyser=` | none | One-variable tornado sweep (gas/elec/carbon/nuclear-PPA/capex), computed server-side |
 | `GET /api/market?year=` | none | Resolved market prices for a scenario year, tagged live vs curated per series |
 | `GET /api/market/observations` | none | Most recent raw observation per live series, for transparency |
+| `POST /api/market/carbon-auction` | admin | Record a new UK ETS auction clearing price (`{ date, clearingPrice }`) — see "Live vs curated data" below |
 | `POST /api/auth/register`, `/login` | none | Email/password auth, returns a JWT |
 | `GET /api/auth/me` | JWT | The logged-in user's id/email/`isAdmin` — what the console uses to decide whether to show assumption-editing controls |
 | `GET/POST /api/projects`, `PUT/DELETE /api/projects/:id` | JWT | Per-user saved projects (the workspace scenarios) |
@@ -112,12 +113,20 @@ before extending this codebase:
   values are p/kWh and converted to £/MWh (×10) to match the pricing
   engine's existing gas price unit. SAP is published roughly a day behind
   the gas day it covers — see the freshness note below.
-- **Carbon price** has a connector stub (`src/data/ukets.ts`) that only
-  activates if `UKETS_AUCTION_URL` is configured, because UK ETS auction/
-  secondary-market pricing has no free structured API — it sits behind
-  licensed feeds (ICE's UK ETS auction platform, or vendors like
-  Argus/ICIS). Until your org has one of those, carbon stays curated. This
-  is intentional, not unfinished.
+- **Carbon price** is also live for 2026, but not via an automatic
+  connector — UK ETS has no free structured API (ICE Futures Europe runs
+  both the primary auctions and secondary market under a paid market-data
+  subscription; that's a genuine paywall, not a gap in this codebase). If
+  `UKETS_AUCTION_URL` is configured, `src/data/ukets.ts`'s connector stub
+  polls a licensed feed automatically. Absent that, the price comes from
+  the most recent **manually-recorded ICE auction clearing price**:
+  `src/data/uketsAuctions.ts` seeds 114 real historical results (26 Jan
+  2022 – 29 Jul 2026, transcribed from ICE's public auction bulletins) on
+  first boot, and an admin can record each new result — ICE auctions run
+  roughly fortnightly — via `POST /api/market/carbon-auction` (or the
+  "Record UK ETS auction result" button on the Assumptions tab). Only if
+  neither a licensed feed nor a manual entry exists does carbon fall back
+  to the curated table.
 - **Nuclear PPA price** is always curated — it has no market feed at all,
   live or otherwise.
 - **2030/2035/2040/2046 are always curated**, regardless of any of the
@@ -137,6 +146,15 @@ just-fetched gas price could still fail the freshness check and silently fall
 back to "curated" with no error anywhere — the connector logs would show a
 successful fetch while the API kept reporting `"source": "curated"`. If you
 add a new live connector, filter on `fetched_at`.
+
+One deliberate exception: manually-recorded observations (source
+`live_ice_auction`, from the UK ETS auction workflow above) have no
+automatic connector re-fetching them, so `fetched_at` recency isn't a
+meaningful signal for them at all — a human confirmed the price when they
+entered it, and it should stay trusted until a newer entry supersedes it,
+not silently expire between fortnightly auctions. `NO_EXPIRY_SOURCES` in
+`marketData.ts` lists which sources skip the `fetched_at` gate for exactly
+this reason.
 
 **Versioned, audited assumptions** (`src/pricing/assumptionsStore.ts`):
 every capex curve, efficiency curve, and delivery-point adder — the numbers
@@ -214,8 +232,11 @@ by comparing ids as strings everywhere; worth a second look if a similar
 
 ## What's genuinely next
 
-1. Decide the gas/carbon licensed-data question, if/when budget allows —
-   the connector shape for either is already there in `src/data/`.
+1. Gas and grid electricity are now live from free public sources; carbon
+   is live too, but via the manual ICE-auction workflow rather than a real
+   connector — worth revisiting if a licensed feed (ICE, Argus/ICIS) is
+   ever worth paying for, since the connector shape for it already exists
+   in `src/data/ukets.ts`.
 2. Revisit auth/permissioning once there's a real answer to "who uses this
    and what should they each be able to see" — likely the point at which
    `is_admin` becomes a proper roles table instead of one boolean, and the

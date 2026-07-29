@@ -2,17 +2,19 @@ import { config } from "../config.js";
 
 /**
  * UK ETS has no free, structured public API for auction or secondary-market
- * carbon prices at the time of writing — auction results are published by
- * the UK ETS Authority, and continuous pricing sits behind licensed feeds
- * (ICE's UK ETS auction platform, or vendors like Argus/ICIS/Refinitiv).
+ * carbon prices — auction results are published by the UK ETS Authority,
+ * and continuous pricing sits behind licensed feeds (ICE's UK ETS auction
+ * platform, or vendors like Argus/ICIS/Refinitiv).
  *
  * This connector is intentionally a stub: it only attempts a fetch if
  * UKETS_AUCTION_URL is configured (i.e. your org has a licensed feed to
- * point it at), and returns null otherwise so the market-data service falls
- * back to the curated carbon-price table. This is a deliberate design
- * choice, not a placeholder to "finish later" — see the briefing doc,
- * Section 7, for why this series stays curated rather than faking a
- * live connection.
+ * point it at), and returns null otherwise. Without one, carbon price
+ * resolution falls through to the most recent manually-recorded ICE
+ * auction result instead (see uketsAuctions.ts and POST
+ * /api/market/carbon-auction) — real clearing prices, hand-entered from
+ * ICE's public bulletins roughly every fortnight, since that's the only
+ * free path to genuine market data here. Only if neither a licensed feed
+ * nor a manual entry exists does the price fall back to the curated table.
  */
 export async function fetchUkEtsCarbonPrice(): Promise<{ value: number; observedDate: string } | null> {
   if (!config.ukEtsAuctionUrl) return null;

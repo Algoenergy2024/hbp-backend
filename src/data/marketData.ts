@@ -30,10 +30,21 @@ export async function recordObservation(series: Series, value: number, source: s
   );
 }
 
+// Manually-recorded observations (e.g. UK ETS auction results — see
+// uketsAuctions.ts) have no automatic connector re-fetching them, so
+// "fetched_at recently" isn't a meaningful freshness signal the way it is
+// for a polling connector. A human confirmed this was the current market
+// price when they entered it, and it stays the best known value until a
+// newer one supersedes it (naturally, via ORDER BY observed_at DESC) — so
+// these sources skip the fetched_at gate entirely.
+const NO_EXPIRY_SOURCES = ["live_ice_auction"];
+
 async function getLatestObservation(series: Series): Promise<{ value: number; source: string } | null> {
+  const noExpiryList = NO_EXPIRY_SOURCES.map(s => `'${s}'`).join(", ");
   const { rows } = await pool.query<{ value: string; source: string; observed_at: Date }>(
     `SELECT value, source, observed_at FROM market_observations
-     WHERE series = $1 AND fetched_at > now() - interval '${FRESHNESS_HOURS} hours'
+     WHERE series = $1
+       AND (fetched_at > now() - interval '${FRESHNESS_HOURS} hours' OR source IN (${noExpiryList}))
      ORDER BY observed_at DESC LIMIT 1`,
     [series]
   );

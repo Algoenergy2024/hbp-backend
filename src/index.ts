@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { startMarketDataScheduler } from "./data/scheduler.js";
+import { seedCarbonAuctionsIfEmpty } from "./data/uketsAuctions.js";
 import { runMigrations } from "./db/migrate.js";
 import { loadActiveAssumptions, seedAssumptionsIfEmpty } from "./pricing/assumptionsStore.js";
 import assumptionsRoutes from "./routes/assumptions.js";
@@ -51,6 +52,9 @@ async function start() {
   const seeded = await seedAssumptionsIfEmpty();
   if (seeded > 0) console.log(`[assumptions] seeded ${seeded} rows from dashboard calibration defaults`);
   await loadActiveAssumptions();
+
+  const seededAuctions = await seedCarbonAuctionsIfEmpty();
+  if (seededAuctions > 0) console.log(`[market] seeded ${seededAuctions} historical UK ETS auction clearing prices`);
 
   app.listen(config.port, () => {
     console.log(`HBP backend listening on :${config.port} (${config.nodeEnv})`);

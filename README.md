@@ -33,6 +33,27 @@ docker compose up --build
 That's it — no second command. The API container migrates and seeds its
 own database on boot before it starts listening, same as local dev.
 
+## Deploying (Railway)
+
+Railway reads the `Dockerfile` directly — no extra config file needed.
+
+1. **New Project → Deploy from GitHub repo** → pick `Algoenergy2024/hbp-backend`.
+2. **Add a database**: in the same project, "+ New" → "Database" → "Add PostgreSQL". Railway provisions it and exposes its connection details as reference variables automatically.
+3. On the **API service** (not the Postgres one), open its **Variables** tab and add:
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (references the Postgres service you just added — pick it from Railway's variable-reference picker rather than typing it) |
+   | `JWT_SECRET` | a long random string — generate one with `openssl rand -hex 32` (or any password generator), don't reuse the placeholder from `.env.example` |
+   | `NODE_ENV` | `production` |
+   | `DATABASE_SSL` | `false` to start with — only set to `true` if the deploy logs show a Postgres SSL connection error |
+   | `MARKET_REFRESH_CRON` | `*/30 * * * *` (or leave unset — that's the default) |
+
+   Leave `PORT` alone — Railway injects it automatically and the app already reads `process.env.PORT`.
+4. Deploy. Watch the build logs, then the runtime logs — you're looking for the same sequence you saw locally: `apply ...`, `Migrations complete.`, `[assumptions] seeded ...`, `HBP backend listening on :<port>`.
+5. Railway gives you a `*.up.railway.app` URL immediately (Settings → Networking → "Generate Domain" if one isn't there yet). That's a real, shareable HTTPS link. A custom domain can be attached from that same screen once you're ready.
+
+Every `git push` to `main` triggers a new Railway build automatically — that's the one place in this whole setup where "push to GitHub" *does* directly update the live thing, unlike your local Docker copy, which still needs its own `git pull` + rebuild.
+
 ## Testing
 
 ```bash

@@ -34,7 +34,8 @@
     electrolyser: "PEM",
     tab: "explorer",
     clusters: null,
-    projects: []
+    projects: [],
+    user: null
   };
 
   // ---------------- API client ----------------
@@ -215,6 +216,7 @@
       document.getElementById("panel-sensitivity").hidden = state.tab !== "sensitivity";
       document.getElementById("panel-portfolio").hidden = state.tab !== "portfolio";
       document.getElementById("panel-workspace").hidden = state.tab !== "workspace";
+      document.getElementById("panel-assumptions").hidden = state.tab !== "assumptions";
       renderActiveTab();
     });
   });
@@ -854,6 +856,157 @@
       .catch(function (err) { document.getElementById("heatmapWrap").innerHTML = '<p class="spot-note">Error: ' + err.message + "</p>"; });
   }
 
+  // ---------------- Assumptions (curated data ledger) ----------------
+
+  // Mirrors the FIELD_MAP in src/pricing/assumptionsStore.ts — every
+  // (category, key) the backend actually manages, in display order, with a
+  // human label and a unit so values format/parse correctly. "pct100" means
+  // the API already stores it as e.g. 72 (not 0.72); "fraction" means the
+  // API stores 0-1 and this UI multiplies by 100 for display only.
+  var ASSUMPTION_FIELDS = [
+    { category: "grey", key: "capexOpex", label: "Grey — Capex/O&M", unit: "gbpkg" },
+    { category: "blue", key: "capex", label: "Blue — Capex", unit: "gbpkg" },
+    { category: "blue", key: "ccsFee", label: "Blue — CCS transport/storage fee", unit: "gbpkg" },
+    { category: "blue", key: "captureRate", label: "Blue — Capture rate", unit: "fraction" },
+    { category: "green", key: "capexOpex", label: "Green — Capex/O&M", unit: "gbpkg" },
+    { category: "pink", key: "capexOpex", label: "Pink — Capex/O&M", unit: "gbpkg" },
+    { category: "turquoise", key: "capexOpex", label: "Turquoise — Capex/O&M", unit: "gbpkg" },
+    { category: "turquoise", key: "elecKwh", label: "Turquoise — Electricity", unit: "kwh" },
+    { category: "electrolyser_efficiency", key: "PEM", label: "Electrolyser efficiency — PEM", unit: "pct100" },
+    { category: "electrolyser_efficiency", key: "AEL", label: "Electrolyser efficiency — AEL", unit: "pct100" },
+    { category: "electrolyser_efficiency", key: "SOE", label: "Electrolyser efficiency — SOE", unit: "pct100" }
+  ].concat(
+    CLUSTER_ORDER.flatMap(function (cid) {
+      return [
+        { category: "delivery_point", key: cid + ".transportPerKg", label: CLUSTER_SHORT[cid] + " — Transport", unit: "gbpkg" },
+        { category: "delivery_point", key: cid + ".storagePerKg", label: CLUSTER_SHORT[cid] + " — Compression/delivery", unit: "gbpkg" }
+      ];
+    })
+  );
+
+  function formatAssumptionValue(unit, value) {
+    if (unit === "gbpkg") return money(value);
+    if (unit === "fraction") return (value * 100).toFixed(1) + "%";
+    if (unit === "pct100") return value.toFixed(1) + "%";
+    if (unit === "kwh") return value.toFixed(1) + " kWh/kg";
+    return String(value);
+  }
+
+  function parseAssumptionValue(unit, raw) {
+    var n = parseFloat(raw);
+    if (isNaN(n)) return null;
+    if (unit === "fraction") return n / 100;
+    return n;
+  }
+
+  function renderAssumptions() {
+    var errorEl = document.getElementById("assumptionsError");
+    errorEl.textContent = "";
+    api("/api/assumptions").then(function (data) {
+      var byKey = {};
+      data.assumptions.forEach(function (row) {
+        var k = row.category + "::" + row.key;
+        byKey[k] = byKey[k] || {};
+        byKey[k][row.year] = row;
+      });
+
+      var table = document.getElementById("assumptionsTable");
+      table.innerHTML = "";
+      var thead = document.createElement("thead");
+      var headRow = document.createElement("tr");
+      ["Field"].concat(YEARS.map(String)).concat([""]).forEach(function (h) {
+        var th = document.createElement("th");
+        th.textContent = h;
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      var tbody = document.createElement("tbody");
+      ASSUMPTION_FIELDS.forEach(function (field) {
+        var tr = document.createElement("tr");
+        var labelTd = document.createElement("td");
+        labelTd.textContent = field.label;
+        tr.appendChild(labelTd);
+
+        var key = field.category + "::" + field.key;
+        YEARS.forEach(function (year) {
+          var td = document.createElement("td");
+          var row = (byKey[key] || {})[year];
+          if (!row) { td.textContent = "—"; tr.appendChild(td); return; }
+          var span = document.createElement("span");
+          span.className = "assump-value" + (state.user && state.user.isAdmin ? " editable" : "");
+          span.textContent = formatAssumptionValue(field.unit, Number(row.value));
+          span.title = row.source === "curated" ? "Curated · last changed " + new Date(row.created_at).toLocaleDateString() : row.source;
+          if (state.user && state.user.isAdmin) {
+            span.addEventListener("click", function () { editAssumption(field, year, Number(row.value)); });
+          }
+          td.appendChild(span);
+          tr.appendChild(td);
+        });
+
+        var historyTd = document.createElement("td");
+        var historyBtn = document.createElement("button");
+        historyBtn.className = "history-btn"; historyBtn.type = "button"; historyBtn.textContent = "History";
+        historyBtn.addEventListener("click", function () { toggleHistory(field, tr); });
+        historyTd.appendChild(historyBtn);
+        tr.appendChild(historyTd);
+
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+    }).catch(function (err) { errorEl.textContent = err.message; });
+  }
+
+  function editAssumption(field, year, currentValue) {
+    var displayCurrent = formatAssumptionValue(field.unit, currentValue);
+    var rawInput = window.prompt(field.label + " (" + year + ") — currently " + displayCurrent + ".\nEnter new value" + (field.unit === "fraction" || field.unit === "pct100" ? " as a percentage, e.g. 82" : field.unit === "kwh" ? " in kWh/kg" : " in £/kg") + ":");
+    if (rawInput === null) return;
+    var value = parseAssumptionValue(field.unit, rawInput);
+    if (value === null) { window.alert("That doesn't look like a number."); return; }
+    var note = window.prompt("Note for the audit trail (required) — why is this changing?");
+    if (!note) { window.alert("A note is required so this change stays auditable — not saved."); return; }
+
+    api("/api/assumptions/" + field.category + "/" + field.key, {
+      method: "PUT",
+      body: JSON.stringify({ year: year, value: value, note: note })
+    })
+      .then(function () { renderAssumptions(); })
+      .catch(function (err) { document.getElementById("assumptionsError").textContent = err.message; });
+  }
+
+  function toggleHistory(field, afterRow) {
+    var existing = afterRow.nextElementSibling;
+    if (existing && existing.classList.contains("history-row")) {
+      existing.remove();
+      return;
+    }
+    document.querySelectorAll(".history-row").forEach(function (el) { el.remove(); });
+
+    api("/api/assumptions/" + field.category + "/" + field.key + "/history").then(function (data) {
+      var tr = document.createElement("tr");
+      tr.className = "history-row";
+      var td = document.createElement("td");
+      td.colSpan = YEARS.length + 2;
+      td.className = "history-detail";
+
+      var rows = data.history.slice().sort(function (a, b) {
+        return a.year - b.year || new Date(a.created_at) - new Date(b.created_at);
+      });
+      var html = "<strong>" + field.label + " — full history</strong><table><tr><th>Year</th><th>Value</th><th>Source</th><th>Note</th><th>Changed by</th><th>When</th><th>Status</th></tr>";
+      rows.forEach(function (r) {
+        var isActive = !r.superseded_at;
+        html += "<tr class=\"" + (isActive ? "" : "superseded") + "\"><td>" + r.year + "</td><td>" + formatAssumptionValue(field.unit, Number(r.value)) +
+          "</td><td>" + r.source + "</td><td>" + (r.note || "—") + "</td><td>" + r.created_by + "</td><td>" +
+          new Date(r.created_at).toLocaleString() + "</td><td>" + (isActive ? '<span class="active-badge">Active</span>' : "Superseded") + "</td></tr>";
+      });
+      html += "</table>";
+      td.innerHTML = html;
+      tr.appendChild(td);
+      afterRow.parentNode.insertBefore(tr, afterRow.nextSibling);
+    });
+  }
+
   // ---------------- Dispatch ----------------
 
   function renderActiveTab() {
@@ -862,6 +1015,7 @@
     else if (state.tab === "sensitivity") renderSensitivity();
     else if (state.tab === "portfolio") renderPortfolio();
     else if (state.tab === "workspace") { renderWorkspace(); renderStressTest(); }
+    else if (state.tab === "assumptions") renderAssumptions();
   }
 
   function renderAll() {
@@ -875,7 +1029,8 @@
   function boot() {
     Promise.all([
       api("/api/pathways/delivery-points").then(function (data) { state.clusters = data; }),
-      loadProjects()
+      loadProjects(),
+      api("/api/auth/me").then(function (data) { state.user = data; })
     ]).then(renderAll)
       .catch(function (err) {
         console.error(err);

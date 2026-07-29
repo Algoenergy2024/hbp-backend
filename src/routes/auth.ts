@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../db/pool.js";
-import { signToken } from "../middleware/auth.js";
+import { requireAuth, signToken, type AuthedRequest } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -52,6 +52,21 @@ router.post("/login", async (req, res) => {
     return;
   }
   res.json({ token: signToken(user.id), userId: user.id });
+});
+
+// So the frontend knows whether to show admin-only controls (assumptions
+// editing) without guessing from a failed write attempt.
+router.get("/me", requireAuth, async (req: AuthedRequest, res) => {
+  const { rows } = await pool.query<{ id: number; email: string; is_admin: boolean }>(
+    "SELECT id, email, is_admin FROM users WHERE id = $1",
+    [req.userId]
+  );
+  const user = rows[0];
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  res.json({ id: user.id, email: user.email, isAdmin: user.is_admin });
 });
 
 export default router;

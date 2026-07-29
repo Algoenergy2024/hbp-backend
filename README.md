@@ -57,6 +57,7 @@ port before it reaches an API response.
 | `GET /api/market?year=` | none | Resolved market prices for a scenario year, tagged live vs curated per series |
 | `GET /api/market/observations` | none | Most recent raw observation per live series, for transparency |
 | `POST /api/auth/register`, `/login` | none | Email/password auth, returns a JWT |
+| `GET /api/auth/me` | JWT | The logged-in user's id/email/`isAdmin` — what the console uses to decide whether to show assumption-editing controls |
 | `GET/POST /api/projects`, `PUT/DELETE /api/projects/:id` | JWT | Per-user saved projects (the workspace scenarios) |
 | `POST /api/projects/compute-batch` | JWT | Stateless `computeProjectCosts()` over a base project plus N field-overridden variations — what the workspace tornado/heatmap sweep through, in one round trip |
 | `GET /api/assumptions` | none | Every currently-active curated assumption (capex curves, efficiency curves, delivery-point adders) |
@@ -113,7 +114,16 @@ Only admins can write an assumption (`src/middleware/admin.ts`) — reads stay
 fully public, because visibility into what's driving the number is the
 point. There's deliberately no self-serve way to become an admin yet
 (`is_admin` is a plain boolean, flipped by hand in the DB for a pilot's
-handful of users) — see Auth below for why.
+handful of users) — see Auth below for why. The console's Assumptions tab
+is this ledger's actual UI: all 19 managed figures (every capex/efficiency
+curve and delivery-point adder) shown as a pivoted table (field × year),
+publicly readable by anyone; a value is clickable to edit only if
+`GET /api/auth/me` says the logged-in user is an admin, and every "History"
+button pulls the full supersede chain for that field — seed value, every
+edit, who made it, and why. Editing is two native `prompt()` dialogs (new
+value, then a required note), not a custom modal — deliberately the
+simplest thing that keeps the interaction accessible, given this is an
+admin-only power-tool control, not a public-facing flow.
 
 **Auth** is deliberately minimal: email/password, one permission level plus
 a single `is_admin` boolean, JWT. No organisations, no roles, no
@@ -163,8 +173,8 @@ by comparing ids as strings everywhere; worth a second look if a similar
 
 1. Decide the gas/carbon licensed-data question, if/when budget allows —
    the connector shape for either is already there in `src/data/`.
-2. Wire the `assumptions` table into a real admin UI in the console itself
-   (today it's API-only — curl/Postman territory).
-3. Revisit auth/permissioning once there's a real answer to "who uses this
+2. Revisit auth/permissioning once there's a real answer to "who uses this
    and what should they each be able to see" — likely the point at which
-   `is_admin` becomes a proper roles table instead of one boolean.
+   `is_admin` becomes a proper roles table instead of one boolean, and the
+   Assumptions tab's edit prompts become a real form with per-category
+   permissions.

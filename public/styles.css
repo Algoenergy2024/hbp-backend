@@ -138,3 +138,16 @@
   table.heatmap-table { border-collapse: collapse; font-family: var(--font-mono); font-size: 11.5px; }
   table.heatmap-table th, table.heatmap-table td { padding: 8px 10px; text-align: center; border: 1px solid var(--border); }
   table.heatmap-table th { background: var(--surface-2); font-size: 10px; text-transform: uppercase; color: var(--text-muted); }
+
+  /* ---------------- Assumptions ---------------- */
+  .assump-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .assump-value.editable { cursor: pointer; border-radius: 3px; padding: 3px 6px; }
+  .assump-value.editable:hover { background: var(--accent-soft, var(--surface-2)); outline: 1px dashed var(--focus); }
+  .assump-source-curated { color: var(--text-muted); font-size: 9.5px; }
+  .history-btn { font-family: var(--font-mono); font-size: 10.5px; background: none; border: 1px solid var(--border); border-radius: 3px; padding: 4px 8px; cursor: pointer; color: var(--text-secondary); }
+  .history-btn:hover { border-color: var(--focus); }
+  .history-detail { font-size: 11.5px; }
+  .history-detail table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .history-detail th, .history-detail td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: left; font-family: var(--font-mono); font-size: 10.5px; }
+  .history-detail .superseded { color: var(--text-muted); text-decoration: line-through; }
+  .history-detail .active-badge { color: var(--status-good); font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; }

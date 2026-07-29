@@ -70,6 +70,7 @@
         <button class="tab-btn" data-tab="sensitivity" type="button">Sensitivity</button>
         <button class="tab-btn" data-tab="portfolio" type="button">Portfolio Blend</button>
         <button class="tab-btn" data-tab="workspace" type="button">Project Workspace</button>
+        <button class="tab-btn" data-tab="assumptions" type="button">Assumptions</button>
       </nav>
 
       <section id="panel-explorer">
@@ -160,6 +161,17 @@
             <div class="field" style="width:160px;"><label>Column variable</label><select id="heatmapColField"></select></div>
           </div>
           <div id="heatmapWrap" style="overflow-x:auto;"></div>
+        </div>
+      </section>
+
+      <section id="panel-assumptions" hidden>
+        <div class="card">
+          <p class="card-title">Curated assumptions</p>
+          <p class="card-sub" id="assumptionsSub">Every capex curve, efficiency curve, and delivery-point adder driving the pricing engine — versioned, and visible to anyone.</p>
+          <p class="error-text" id="assumptionsError"></p>
+          <div style="overflow-x:auto;">
+            <table class="proj-table" id="assumptionsTable"></table>
+          </div>
         </div>
       </section>
     </main>

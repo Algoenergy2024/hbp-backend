@@ -1,17 +1,21 @@
 import {
   BLUE,
-  CLUSTERS,
-  ELECTROLYSER_EFF,
   GREEN,
   GREY,
   HHV_PER_KG,
   PINK,
   TURQ,
-  type ClusterId,
   type Electrolyser,
-  type Year,
-  clusterAdd
+  type Year
 } from "./constants.js";
+import { assumptions } from "./assumptionsStore.js";
+
+// Delivery-point adder now reads through the assumptions store (DB-backed,
+// falling back to the constants.ts defaults) rather than indexing CLUSTERS
+// directly, so an audited change to a logistics adder applies here too.
+function clusterAdd(clusterId: string, year: Year): number {
+  return assumptions.deliveryTransport(clusterId, year) + assumptions.deliveryStorage(clusterId, year);
+}
 
 // The engine takes market prices as an explicit input rather than reaching
 // into a global — this is the one deliberate change from the dashboard's
@@ -32,7 +36,7 @@ export interface CostBreakdown {
 export function greyCost(market: MarketPrices, year: Year, clusterId: string): CostBreakdown {
   const gas = market.gasPrice * (GREY.ngKwh / 1000);
   const elec = market.gridElec * (GREY.elecKwh / 1000);
-  const capex = GREY.capexOpex[year];
+  const capex = assumptions.greyCapexOpex(year);
   const cluster = clusterAdd(clusterId, year);
   return { gas, elec, capex, cluster, total: gas + elec + capex + cluster };
 }
@@ -44,11 +48,11 @@ export function greyCarbonExposure(carbonPrice: number): number {
 export function blueCost(market: MarketPrices, year: Year, clusterId: string): CostBreakdown {
   const gas = market.gasPrice * (BLUE.ngKwh / 1000);
   const elec = market.gridElec * (BLUE.elecKwh / 1000);
-  const captureRate = BLUE.captureRate[year];
+  const captureRate = assumptions.blueCaptureRate(year);
   const residual = BLUE.unabatedCO2PerKg * (1 - captureRate);
   const carbon = (residual * market.carbonPrice) / 1000;
-  const capex = BLUE.capex[year];
-  const ccsFee = BLUE.ccsFee[year];
+  const capex = assumptions.blueCapex(year);
+  const ccsFee = assumptions.blueCcsFee(year);
   const cluster = clusterAdd(clusterId, year);
   return {
     gas,
@@ -68,20 +72,20 @@ export function greenCost(
   electrolyser: Electrolyser,
   clusterId: string
 ): CostBreakdown {
-  const effPct = ELECTROLYSER_EFF[electrolyser][year];
+  const effPct = assumptions.electrolyserEfficiency(electrolyser, year);
   const kwhPerKg = HHV_PER_KG / (effPct / 100);
   const energy = market.gridElec * (kwhPerKg / 1000);
-  const capex = GREEN.capexOpex[year];
+  const capex = assumptions.greenCapexOpex(year);
   const other = GREEN.otherPerKg;
   const cluster = clusterAdd(clusterId, year);
   return { energy, capex, other, cluster, total: energy + capex + other + cluster, kwhPerKg, effPct };
 }
 
 export function pinkCost(market: MarketPrices, year: Year, clusterId: string): CostBreakdown {
-  const effPct = ELECTROLYSER_EFF.PEM[year];
+  const effPct = assumptions.electrolyserEfficiency("PEM", year);
   const kwhPerKg = HHV_PER_KG / (effPct / 100);
   const energy = market.nuclearPPA * (kwhPerKg / 1000);
-  const capex = PINK.capexOpex[year];
+  const capex = assumptions.pinkCapexOpex(year);
   const other = PINK.otherPerKg;
   const cluster = clusterAdd(clusterId, year);
   return { energy, capex, other, cluster, total: energy + capex + other + cluster, kwhPerKg, effPct };
@@ -89,8 +93,8 @@ export function pinkCost(market: MarketPrices, year: Year, clusterId: string): C
 
 export function turquoiseCost(market: MarketPrices, year: Year, clusterId: string): CostBreakdown {
   const gas = market.gasPrice * (TURQ.ngKwh / 1000);
-  const elec = market.gridElec * (TURQ.elecKwh[year] / 1000);
-  const capex = TURQ.capexOpex[year];
+  const elec = market.gridElec * (assumptions.turqElecKwh(year) / 1000);
+  const capex = assumptions.turqCapexOpex(year);
   const credit = TURQ.carbonBlackCredit;
   const cluster = clusterAdd(clusterId, year);
   return { gas, elec, capex, credit, cluster, total: gas + elec + capex + credit + cluster };
@@ -171,6 +175,5 @@ export function computeProjectCosts(proj: ProjectInput): ProjectCosts {
 }
 
 export function defaultDeliveryFor(clusterId: string, year: Year) {
-  const c = CLUSTERS[clusterId as ClusterId] ?? CLUSTERS.ROAD;
-  return { transport: c.transportPerKg[year] ?? 0, storage: c.storagePerKg[year] ?? 0 };
+  return { transport: assumptions.deliveryTransport(clusterId, year), storage: assumptions.deliveryStorage(clusterId, year) };
 }

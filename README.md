@@ -54,6 +54,9 @@ port before it reaches an API response.
 | `GET /api/market/observations` | none | Most recent raw observation per live series, for transparency |
 | `POST /api/auth/register`, `/login` | none | Email/password auth, returns a JWT |
 | `GET/POST /api/projects`, `PUT/DELETE /api/projects/:id` | JWT | Per-user saved projects (the workspace scenarios) |
+| `GET /api/assumptions` | none | Every currently-active curated assumption (capex curves, efficiency curves, delivery-point adders) |
+| `GET /api/assumptions/:category/:key/history` | none | Full change history for one assumption, including superseded values |
+| `PUT /api/assumptions/:category/:key` | JWT + admin | Revise one assumption for one year; supersedes the old value, never overwrites it |
 
 ## Architecture & current state
 
@@ -86,29 +89,40 @@ before extending this codebase:
   feed could ever populate. Only `LIVE_ELIGIBLE_YEAR` (2026) in
   `src/data/marketData.ts` can ever resolve to a live value.
 
-**Curated data today** lives in `src/pricing/constants.ts` as the same
-plain constants the dashboard used. The `assumptions` table
-(migration `0001_init.sql`) exists so those constants can move to a
-versioned, audited ledger — every technology/delivery-point figure gets a
-row per change instead of being overwritten, which is what a "neutral
-reference price" needs to be defensible. **That table is not wired up
-yet** — the engine still reads `constants.ts` directly. Wiring assumptions
-lookups through the DB (with `constants.ts` as the seed/fallback) is the
-natural next piece of work, not a placeholder left by accident.
+**Versioned, audited assumptions** (`src/pricing/assumptionsStore.ts`):
+every capex curve, efficiency curve, and delivery-point adder — the numbers
+a methodology committee would actually want to revise and sign off on — now
+lives in the `assumptions` table, not just as constants in source code.
+On first boot the table is seeded from `src/pricing/constants.ts` (the
+dashboard's original calibration); after that, `constants.ts` is only the
+fallback if a lookup is somehow missing, not the live source of truth. The
+pricing engine reads through an in-memory cache (`assumptions.*` getters in
+`assumptionsStore.ts`) that's loaded from the DB at startup, so nothing in
+`engine.ts` needed to become async. Every write **supersedes** the previous
+active row rather than overwriting it — `GET /api/assumptions/:category/:key/history`
+shows the full chain, including who changed it, when, and why (a `note` is
+required on every write). This is what actually earns the "neutral
+reference price" claim; a live power feed does not.
 
-**Auth** is deliberately minimal: email/password, one permission level, JWT.
-No organisations, no roles, no fine-grained sharing — those are blocked on
-a decision about who HBP is actually for (see the platform briefing doc,
-Section 9), and building permissioning before that's answered would mean
-guessing at a shape that's likely wrong.
+Only admins can write an assumption (`src/middleware/admin.ts`) — reads stay
+fully public, because visibility into what's driving the number is the
+point. There's deliberately no self-serve way to become an admin yet
+(`is_admin` is a plain boolean, flipped by hand in the DB for a pilot's
+handful of users) — see Auth below for why.
+
+**Auth** is deliberately minimal: email/password, one permission level plus
+a single `is_admin` boolean, JWT. No organisations, no roles, no
+fine-grained sharing — those are blocked on a decision about who HBP is
+actually for (see the platform briefing doc, Section 9), and building
+permissioning before that's answered would mean guessing at a shape that's
+likely wrong.
 
 ## What's genuinely next
 
-1. Wire `assumptions` table reads into the pricing engine (with change
-   history), replacing the direct `constants.ts` reads.
-2. Decide the gas/carbon licensed-data question, if/when budget allows —
+1. Decide the gas/carbon licensed-data question, if/when budget allows —
    the connector shape for either is already there in `src/data/`.
-3. Point the dashboard frontend at this API instead of computing locally
+2. Point the dashboard frontend at this API instead of computing locally
    and using `localStorage` — a frontend change, not a backend one.
-4. Revisit auth/permissioning once there's a real answer to "who uses this
-   and what should they each be able to see."
+3. Revisit auth/permissioning once there's a real answer to "who uses this
+   and what should they each be able to see" — likely the point at which
+   `is_admin` becomes a proper roles table instead of one boolean.

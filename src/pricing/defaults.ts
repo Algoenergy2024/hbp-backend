@@ -1,14 +1,5 @@
-import {
-  BLUE,
-  ELECTROLYSER_EFF,
-  GREEN,
-  GREY,
-  HHV_PER_KG,
-  PINK,
-  TURQ,
-  type Electrolyser,
-  type Year
-} from "./constants.js";
+import { BLUE, GREEN, GREY, HHV_PER_KG, PINK, TURQ, type Electrolyser, type Year } from "./constants.js";
+import { assumptions } from "./assumptionsStore.js";
 import { computeProjectCosts, defaultDeliveryFor, type ProjectInput } from "./engine.js";
 import type { MarketPrices } from "./engine.js";
 import type { Pathway } from "./engine.js";
@@ -59,36 +50,36 @@ export function defaultProjectFor(
     base.unabatedCO2 = GREY.unabatedCO2PerKg;
     base.carbonPrice = market.carbonPrice;
     base.priceCarbon = false;
-    base.capex = GREY.capexOpex[year];
+    base.capex = assumptions.greyCapexOpex(year);
   } else if (pathway === "blue") {
     base.gasPrice = market.gasPrice;
     base.gasKwh = round2(BLUE.ngKwh);
     base.elecPrice = market.gridElec;
     base.elecKwh = BLUE.elecKwh;
     base.unabatedCO2 = BLUE.unabatedCO2PerKg;
-    base.captureRate = round2(BLUE.captureRate[year] * 100);
+    base.captureRate = round2(assumptions.blueCaptureRate(year) * 100);
     base.carbonPrice = market.carbonPrice;
     base.priceCarbon = true;
-    base.capex = BLUE.capex[year];
-    base.ccsFee = BLUE.ccsFee[year];
+    base.capex = assumptions.blueCapex(year);
+    base.ccsFee = assumptions.blueCcsFee(year);
   } else if (pathway === "green") {
-    const eff = ELECTROLYSER_EFF[electrolyser][year];
+    const eff = assumptions.electrolyserEfficiency(electrolyser, year);
     base.elecPrice = market.gridElec;
     base.elecKwh = round2(HHV_PER_KG / (eff / 100));
-    base.capex = GREEN.capexOpex[year];
+    base.capex = assumptions.greenCapexOpex(year);
     base.other = GREEN.otherPerKg;
   } else if (pathway === "pink") {
-    const eff = ELECTROLYSER_EFF.PEM[year];
+    const eff = assumptions.electrolyserEfficiency("PEM", year);
     base.elecPrice = market.nuclearPPA;
     base.elecKwh = round2(HHV_PER_KG / (eff / 100));
-    base.capex = PINK.capexOpex[year];
+    base.capex = assumptions.pinkCapexOpex(year);
     base.other = PINK.otherPerKg;
   } else if (pathway === "turquoise") {
     base.gasPrice = market.gasPrice;
     base.gasKwh = TURQ.ngKwh;
     base.elecPrice = market.gridElec;
-    base.elecKwh = TURQ.elecKwh[year];
-    base.capex = TURQ.capexOpex[year];
+    base.elecKwh = assumptions.turqElecKwh(year);
+    base.capex = assumptions.turqCapexOpex(year);
     base.credit = Math.abs(TURQ.carbonBlackCredit);
   }
 

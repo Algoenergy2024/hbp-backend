@@ -76,10 +76,12 @@ export const CLUSTERS: Record<ClusterId, DeliveryPoint> = {
   }
 };
 
-export function clusterAdd(clusterId: string, year: Year): number {
-  const c = CLUSTERS[clusterId as ClusterId] ?? CLUSTERS.ROAD;
-  return (c.transportPerKg[year] ?? 0) + (c.storagePerKg[year] ?? 0);
-}
+// Note: there is no clusterAdd() here — the live version that the pricing
+// engine actually uses lives in engine.ts and reads through the assumptions
+// store (assumptionsStore.ts), not these static CLUSTERS values directly.
+// CLUSTERS/CLUSTER_ORDER below remain the seed data and the source for
+// structural metadata (name/mode/caveat) that isn't itself a versioned
+// assumption.
 
 // Curated market series defaults (used when no live observation is available).
 export const MARKET_DEFAULTS = {

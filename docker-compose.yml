@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hbp
+      POSTGRES_PASSWORD: hbp_dev_local
+      POSTGRES_DB: hbp_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - hbp_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hbp -d hbp_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+      DATABASE_URL: postgres://hbp:hbp_dev_local@db:5432/hbp_dev
+      JWT_SECRET: change-me-to-a-long-random-string
+      JWT_EXPIRY: 7d
+      ELEXON_BMRS_BASE_URL: https://data.elexon.co.uk/bmrs/api/v1
+      UKETS_AUCTION_URL: ""
+      MARKET_REFRESH_CRON: "*/30 * * * *"
+    ports:
+      - "4000:4000"
+
+volumes:
+  hbp_pg_data:

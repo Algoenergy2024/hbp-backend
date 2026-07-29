@@ -1,6 +1,8 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { startMarketDataScheduler } from "./data/scheduler.js";
 import { loadActiveAssumptions, seedAssumptionsIfEmpty } from "./pricing/assumptionsStore.js";
@@ -9,6 +11,11 @@ import authRoutes from "./routes/auth.js";
 import marketRoutes from "./routes/market.js";
 import pathwaysRoutes from "./routes/pathways.js";
 import projectsRoutes from "./routes/projects.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Works from both src/ (dev, via tsx) and dist/ (prod, after tsc) — both
+// sit one directory below the repo root, where public/ lives.
+const publicDir = path.join(__dirname, "..", "public");
 
 const app = express();
 
@@ -23,6 +30,10 @@ app.use("/api/pathways", pathwaysRoutes);
 app.use("/api/market", marketRoutes);
 app.use("/api/projects", projectsRoutes);
 app.use("/api/assumptions", assumptionsRoutes);
+
+app.use(express.static(publicDir));
+app.get("/", (_req, res) => res.sendFile(path.join(publicDir, "index.html")));
+app.get("/favicon.ico", (_req, res) => res.status(204).end());
 
 app.use((req, res) => {
   res.status(404).json({ error: `No route for ${req.method} ${req.path}` });

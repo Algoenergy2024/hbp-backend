@@ -1,8 +1,8 @@
 # HBP Backend
 
-Backend API for Hydrogen Balancing Point (HBP): the pricing engine, live
-market data connectors, and project/scenario persistence behind the HBP
-dashboard. This is Phase 1 of the platform's build-out — see
+Backend API — and now the live web console — for Hydrogen Balancing Point
+(HBP): the pricing engine, live market data connectors, and project/scenario
+persistence. This is Phase 1 of the platform's build-out — see
 [Architecture & current state](#architecture--current-state) for exactly
 what is and isn't live yet.
 
@@ -14,8 +14,11 @@ Requires Node 20+ and a local Postgres.
 cp .env.example .env        # edit DATABASE_URL if needed
 npm install
 npm run migrate              # creates tables
-npm run dev                  # starts the API on :4000
+npm run dev                  # starts the API + web console on :4000
 ```
+
+Open `http://localhost:4000` — that's the actual console now, not the
+standalone artifact. Register an account, and you're in.
 
 ## Quick start (Docker)
 
@@ -117,12 +120,37 @@ actually for (see the platform briefing doc, Section 9), and building
 permissioning before that's answered would mean guessing at a shape that's
 likely wrong.
 
+**The web console** (`public/`) is a plain HTML/CSS/JS frontend served
+directly by this same Express app (`express.static`), calling the API with
+relative `/api/...` paths — deliberately not the original dashboard
+artifact wired up as-is. That artifact runs inside Claude's Artifact
+sandbox under a strict CSP that blocks calls to any external host, so it
+was never going to be able to call a real backend from there; the frontend
+had to move to be served by the backend itself instead. It carries over the
+brand (tokens, type pairing, the diurnal cost-curve texture) but is a
+smaller rewrite, not a line-for-line port — see below for exactly what
+didn't come across yet.
+
+**What's in the console today:** sign in/register, Price Explorer (cost
+breakdown, uncertainty band, carbon policy exposure, live/curated market
+badge), Pathway Comparison (ranked, plus the static GeoPura spot-price
+reference card), and Project Workspace (add/edit/delete a project per
+pathway, CfD gap, all persisted server-side — no more `localStorage`).
+
+**What didn't come across in this pass**, and is genuinely still open:
+sensitivity tornado charts, the two-variable heatmap, Portfolio Blend, and
+CSV/PNG export. None of these need new backend capability to add — the
+sensitivity/heatmap views specifically would want a small "cost with
+market-price overrides" endpoint (so a swept gas/carbon/capex value is
+still computed server-side, not duplicated as a formula in the browser)
+rather than reusing `/api/pathways/:pathway/cost` as-is.
+
 ## What's genuinely next
 
 1. Decide the gas/carbon licensed-data question, if/when budget allows —
    the connector shape for either is already there in `src/data/`.
-2. Point the dashboard frontend at this API instead of computing locally
-   and using `localStorage` — a frontend change, not a backend one.
+2. Bring over sensitivity, the heatmap, Portfolio Blend, and CSV/PNG export
+   from the original dashboard artifact into the web console.
 3. Revisit auth/permissioning once there's a real answer to "who uses this
    and what should they each be able to see" — likely the point at which
    `is_admin` becomes a proper roles table instead of one boolean.

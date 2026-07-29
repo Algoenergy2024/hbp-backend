@@ -188,6 +188,50 @@ router.put("/:id", async (req: AuthedRequest, res) => {
   res.json(toApi(row));
 });
 
+const projectInputSchema = z.object({
+  gasPrice: z.number().default(0),
+  gasKwh: z.number().default(0),
+  elecPrice: z.number().default(0),
+  elecKwh: z.number().default(0),
+  unabatedCO2: z.number().default(0),
+  captureRate: z.number().default(0),
+  carbonPrice: z.number().default(0),
+  priceCarbon: z.boolean().default(false),
+  capex: z.number().default(0),
+  ccsFee: z.number().default(0),
+  credit: z.number().default(0),
+  other: z.number().default(0),
+  transport: z.number().default(0),
+  storage: z.number().default(0),
+  refPrice: z.number().default(0)
+});
+
+const computeBatchSchema = z.object({
+  base: projectInputSchema,
+  variations: z
+    .array(z.object({ label: z.string(), overrides: projectInputSchema.partial() }))
+    .max(200, "Too many variations in one batch (max 200)")
+});
+
+// Stateless — computes computeProjectCosts() for a base project plus any
+// number of field-overridden variations in one round trip. This is what the
+// sensitivity tornado and two-variable heatmap in a project workspace sweep
+// through, so the cost formula stays defined in exactly one place
+// (pricing/engine.ts) instead of being re-implemented in the browser.
+router.post("/compute-batch", (req: AuthedRequest, res) => {
+  const parsed = computeBatchSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+  const { base, variations } = parsed.data;
+  const results = variations.map(v => {
+    const merged: ProjectInput = { ...base, ...v.overrides };
+    return { label: v.label, costs: computeProjectCosts(merged) };
+  });
+  res.json({ base: computeProjectCosts(base), results });
+});
+
 router.delete("/:id", async (req: AuthedRequest, res) => {
   const { rowCount } = await pool.query(
     "DELETE FROM projects WHERE id = $1 AND user_id = $2",

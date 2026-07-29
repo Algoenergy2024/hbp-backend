@@ -33,10 +33,18 @@ export interface CostBreakdown {
   [line: string]: number;
 }
 
-export function greyCost(market: MarketPrices, year: Year, clusterId: string): CostBreakdown {
+// Optional override for the pathway's primary capex/O&M figure, used by the
+// sensitivity endpoint to sweep capex without duplicating any pricing
+// formula in the browser — every sweep is still computed here, just with
+// one resolved value swapped for a caller-supplied one.
+export interface CostOverrides {
+  capex?: number;
+}
+
+export function greyCost(market: MarketPrices, year: Year, clusterId: string, overrides?: CostOverrides): CostBreakdown {
   const gas = market.gasPrice * (GREY.ngKwh / 1000);
   const elec = market.gridElec * (GREY.elecKwh / 1000);
-  const capex = assumptions.greyCapexOpex(year);
+  const capex = overrides?.capex ?? assumptions.greyCapexOpex(year);
   const cluster = clusterAdd(clusterId, year);
   return { gas, elec, capex, cluster, total: gas + elec + capex + cluster };
 }
@@ -45,13 +53,13 @@ export function greyCarbonExposure(carbonPrice: number): number {
   return (GREY.unabatedCO2PerKg * carbonPrice) / 1000;
 }
 
-export function blueCost(market: MarketPrices, year: Year, clusterId: string): CostBreakdown {
+export function blueCost(market: MarketPrices, year: Year, clusterId: string, overrides?: CostOverrides): CostBreakdown {
   const gas = market.gasPrice * (BLUE.ngKwh / 1000);
   const elec = market.gridElec * (BLUE.elecKwh / 1000);
   const captureRate = assumptions.blueCaptureRate(year);
   const residual = BLUE.unabatedCO2PerKg * (1 - captureRate);
   const carbon = (residual * market.carbonPrice) / 1000;
-  const capex = assumptions.blueCapex(year);
+  const capex = overrides?.capex ?? assumptions.blueCapex(year);
   const ccsFee = assumptions.blueCcsFee(year);
   const cluster = clusterAdd(clusterId, year);
   return {
@@ -70,31 +78,32 @@ export function greenCost(
   market: MarketPrices,
   year: Year,
   electrolyser: Electrolyser,
-  clusterId: string
+  clusterId: string,
+  overrides?: CostOverrides
 ): CostBreakdown {
   const effPct = assumptions.electrolyserEfficiency(electrolyser, year);
   const kwhPerKg = HHV_PER_KG / (effPct / 100);
   const energy = market.gridElec * (kwhPerKg / 1000);
-  const capex = assumptions.greenCapexOpex(year);
+  const capex = overrides?.capex ?? assumptions.greenCapexOpex(year);
   const other = GREEN.otherPerKg;
   const cluster = clusterAdd(clusterId, year);
   return { energy, capex, other, cluster, total: energy + capex + other + cluster, kwhPerKg, effPct };
 }
 
-export function pinkCost(market: MarketPrices, year: Year, clusterId: string): CostBreakdown {
+export function pinkCost(market: MarketPrices, year: Year, clusterId: string, overrides?: CostOverrides): CostBreakdown {
   const effPct = assumptions.electrolyserEfficiency("PEM", year);
   const kwhPerKg = HHV_PER_KG / (effPct / 100);
   const energy = market.nuclearPPA * (kwhPerKg / 1000);
-  const capex = assumptions.pinkCapexOpex(year);
+  const capex = overrides?.capex ?? assumptions.pinkCapexOpex(year);
   const other = PINK.otherPerKg;
   const cluster = clusterAdd(clusterId, year);
   return { energy, capex, other, cluster, total: energy + capex + other + cluster, kwhPerKg, effPct };
 }
 
-export function turquoiseCost(market: MarketPrices, year: Year, clusterId: string): CostBreakdown {
+export function turquoiseCost(market: MarketPrices, year: Year, clusterId: string, overrides?: CostOverrides): CostBreakdown {
   const gas = market.gasPrice * (TURQ.ngKwh / 1000);
   const elec = market.gridElec * (assumptions.turqElecKwh(year) / 1000);
-  const capex = assumptions.turqCapexOpex(year);
+  const capex = overrides?.capex ?? assumptions.turqCapexOpex(year);
   const credit = TURQ.carbonBlackCredit;
   const cluster = clusterAdd(clusterId, year);
   return { gas, elec, capex, credit, cluster, total: gas + elec + capex + credit + cluster };
@@ -107,19 +116,36 @@ export function pathwayCost(
   market: MarketPrices,
   year: Year,
   clusterId: string,
-  electrolyser: Electrolyser = "PEM"
+  electrolyser: Electrolyser = "PEM",
+  overrides?: CostOverrides
 ): CostBreakdown {
   switch (pathway) {
     case "grey":
-      return greyCost(market, year, clusterId);
+      return greyCost(market, year, clusterId, overrides);
     case "blue":
-      return blueCost(market, year, clusterId);
+      return blueCost(market, year, clusterId, overrides);
     case "green":
-      return greenCost(market, year, electrolyser, clusterId);
+      return greenCost(market, year, electrolyser, clusterId, overrides);
     case "pink":
-      return pinkCost(market, year, clusterId);
+      return pinkCost(market, year, clusterId, overrides);
     case "turquoise":
-      return turquoiseCost(market, year, clusterId);
+      return turquoiseCost(market, year, clusterId, overrides);
+  }
+}
+
+/** The resolved capex/O&M figure the sensitivity endpoint sweeps around for a given pathway/year. */
+export function baseCapexFor(pathway: Pathway, year: Year, electrolyser: Electrolyser = "PEM"): number {
+  switch (pathway) {
+    case "grey":
+      return assumptions.greyCapexOpex(year);
+    case "blue":
+      return assumptions.blueCapex(year);
+    case "green":
+      return assumptions.greenCapexOpex(year);
+    case "pink":
+      return assumptions.pinkCapexOpex(year);
+    case "turquoise":
+      return assumptions.turqCapexOpex(year);
   }
 }
 

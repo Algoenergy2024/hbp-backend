@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { getMarketPrices } from "../data/marketData.js";
 import { CLUSTER_ORDER, CLUSTERS, PATHWAY_ORDER, UNCERTAINTY_PCT, YEARS, type Year } from "../pricing/constants.js";
-import { greyCarbonExposure, pathwayCost, type Pathway } from "../pricing/engine.js";
+import { baseCapexFor, greyCarbonExposure, pathwayCost, type Pathway } from "../pricing/engine.js";
 
 const router = Router();
 
@@ -61,6 +61,68 @@ router.get("/:pathway/cost", async (req, res) => {
       pathway === "grey" ? greyCarbonExposure(prices.carbonPrice) : breakdown.carbon;
   }
   res.json(response);
+});
+
+interface SweepRow {
+  name: string;
+  low: number;
+  high: number;
+  baseline: number;
+  exposure?: boolean;
+}
+
+function sweep(name: string, baseline: number, f: (mult: number) => number, lowMult: number, highMult: number): SweepRow {
+  const a = f(lowMult);
+  const b = f(highMult);
+  return { name, low: Math.min(a, b), high: Math.max(a, b), baseline };
+}
+
+router.get("/:pathway/sensitivity", async (req, res) => {
+  const pathway = req.params.pathway as Pathway;
+  if (!(PATHWAY_ORDER as readonly string[]).includes(pathway)) {
+    res.status(404).json({ error: `Unknown pathway "${pathway}". Expected one of: ${PATHWAY_ORDER.join(", ")}` });
+    return;
+  }
+  const parsed = querySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid query parameters" });
+    return;
+  }
+  const { year, clusterId, electrolyser } = parsed.data;
+  const { prices } = await getMarketPrices(year);
+  const baseline = pathwayCost(pathway, prices, year, clusterId, electrolyser).total;
+  const baseCapex = baseCapexFor(pathway, year, electrolyser);
+
+  function withCapex(mult: number) {
+    return pathwayCost(pathway, prices, year, clusterId, electrolyser, { capex: baseCapex * mult }).total;
+  }
+
+  const rows: SweepRow[] = [];
+  if (pathway === "grey") {
+    rows.push(sweep("Gas price", baseline, m => pathwayCost("grey", { ...prices, gasPrice: prices.gasPrice * m }, year, clusterId).total, 0.7, 1.3));
+    rows.push(sweep("Capex + O&M", baseline, withCapex, 0.8, 1.2));
+    const exposureBase = greyCarbonExposure(prices.carbonPrice);
+    rows.push({
+      ...sweep("Carbon policy exposure", exposureBase, m => greyCarbonExposure(prices.carbonPrice * m), 0.7, 1.3),
+      exposure: true
+    });
+  } else if (pathway === "blue") {
+    rows.push(sweep("Gas price", baseline, m => pathwayCost("blue", { ...prices, gasPrice: prices.gasPrice * m }, year, clusterId).total, 0.7, 1.3));
+    rows.push(sweep("Carbon price", baseline, m => pathwayCost("blue", { ...prices, carbonPrice: prices.carbonPrice * m }, year, clusterId).total, 0.7, 1.3));
+    rows.push(sweep("Capex", baseline, withCapex, 0.8, 1.2));
+  } else if (pathway === "green") {
+    rows.push(sweep("Electricity price", baseline, m => pathwayCost("green", { ...prices, gridElec: prices.gridElec * m }, year, clusterId, electrolyser).total, 0.7, 1.3));
+    rows.push(sweep("Capex + O&M", baseline, withCapex, 0.8, 1.2));
+  } else if (pathway === "pink") {
+    rows.push(sweep("Nuclear PPA price", baseline, m => pathwayCost("pink", { ...prices, nuclearPPA: prices.nuclearPPA * m }, year, clusterId).total, 0.7, 1.3));
+    rows.push(sweep("Capex + O&M", baseline, withCapex, 0.8, 1.2));
+  } else {
+    rows.push(sweep("Gas price", baseline, m => pathwayCost("turquoise", { ...prices, gasPrice: prices.gasPrice * m }, year, clusterId).total, 0.7, 1.3));
+    rows.push(sweep("Electricity price", baseline, m => pathwayCost("turquoise", { ...prices, gridElec: prices.gridElec * m }, year, clusterId).total, 0.7, 1.3));
+    rows.push(sweep("Capex + O&M", baseline, withCapex, 0.8, 1.2));
+  }
+
+  res.json({ pathway, year, clusterId, baseline, rows });
 });
 
 router.get("/compare/:year", async (req, res) => {

@@ -53,10 +53,12 @@ port before it reaches an API response.
 | `GET /api/pathways/delivery-points` | none | Full delivery-point detail (mode, adders, caveat) |
 | `GET /api/pathways/:pathway/cost?year=&clusterId=&electrolyser=` | none | Cost breakdown, uncertainty band, market sources for one pathway |
 | `GET /api/pathways/compare/:year?clusterId=` | none | All five pathways ranked, same year/delivery point |
+| `GET /api/pathways/:pathway/sensitivity?year=&clusterId=&electrolyser=` | none | One-variable tornado sweep (gas/elec/carbon/nuclear-PPA/capex), computed server-side |
 | `GET /api/market?year=` | none | Resolved market prices for a scenario year, tagged live vs curated per series |
 | `GET /api/market/observations` | none | Most recent raw observation per live series, for transparency |
 | `POST /api/auth/register`, `/login` | none | Email/password auth, returns a JWT |
 | `GET/POST /api/projects`, `PUT/DELETE /api/projects/:id` | JWT | Per-user saved projects (the workspace scenarios) |
+| `POST /api/projects/compute-batch` | JWT | Stateless `computeProjectCosts()` over a base project plus N field-overridden variations — what the workspace tornado/heatmap sweep through, in one round trip |
 | `GET /api/assumptions` | none | Every currently-active curated assumption (capex curves, efficiency curves, delivery-point adders) |
 | `GET /api/assumptions/:category/:key/history` | none | Full change history for one assumption, including superseded values |
 | `PUT /api/assumptions/:category/:key` | JWT + admin | Revise one assumption for one year; supersedes the old value, never overwrites it |
@@ -131,26 +133,38 @@ brand (tokens, type pairing, the diurnal cost-curve texture) but is a
 smaller rewrite, not a line-for-line port — see below for exactly what
 didn't come across yet.
 
-**What's in the console today:** sign in/register, Price Explorer (cost
+**What's in the console today:** sign in/register; Price Explorer (cost
 breakdown, uncertainty band, carbon policy exposure, live/curated market
-badge), Pathway Comparison (ranked, plus the static GeoPura spot-price
-reference card), and Project Workspace (add/edit/delete a project per
-pathway, CfD gap, all persisted server-side — no more `localStorage`).
+badge, an illustrative 24-hour price curve, PNG export); Pathway Comparison
+(ranked, plus the static GeoPura spot-price reference card); Sensitivity
+(one-variable tornado per pathway, server-computed); Portfolio Blend
+(weight any saved projects into one blended delivered price); and Project
+Workspace (add/edit/delete a project per pathway, CfD gap, CSV export, a
+per-project stress test with both a tornado sweep and a two-variable
+heatmap) — all persisted server-side, no more `localStorage` for app data.
 
-**What didn't come across in this pass**, and is genuinely still open:
-sensitivity tornado charts, the two-variable heatmap, Portfolio Blend, and
-CSV/PNG export. None of these need new backend capability to add — the
-sensitivity/heatmap views specifically would want a small "cost with
-market-price overrides" endpoint (so a swept gas/carbon/capex value is
-still computed server-side, not duplicated as a formula in the browser)
-rather than reusing `/api/pathways/:pathway/cost` as-is.
+Every sweep (tornado or heatmap, canonical-pathway or per-project) is
+computed by the backend, not duplicated as a formula in the browser: the
+canonical ones call `/api/pathways/:pathway/sensitivity`, the per-project
+ones call `/api/projects/compute-batch`. The frontend only ever renders
+numbers the API returned.
+
+One bug worth knowing about, since it's the kind that hides well: project
+ids come back from Postgres (BIGSERIAL) as strings, and an early version of
+the stress-test and portfolio-blend code ran them through `parseInt` before
+comparing with `===` against the string ids already in `state.projects`.
+That comparison silently fails a strict-equality check without throwing,
+so the symptom was stale UI, not an error — caught by deliberately
+instrumenting the DOM mid-test rather than trusting a clean console. Fixed
+by comparing ids as strings everywhere; worth a second look if a similar
+"nothing happens, no error either" symptom shows up elsewhere.
 
 ## What's genuinely next
 
 1. Decide the gas/carbon licensed-data question, if/when budget allows —
    the connector shape for either is already there in `src/data/`.
-2. Bring over sensitivity, the heatmap, Portfolio Blend, and CSV/PNG export
-   from the original dashboard artifact into the web console.
+2. Wire the `assumptions` table into a real admin UI in the console itself
+   (today it's API-only — curl/Postman territory).
 3. Revisit auth/permissioning once there's a real answer to "who uses this
    and what should they each be able to see" — likely the point at which
    `is_admin` becomes a proper roles table instead of one boolean.

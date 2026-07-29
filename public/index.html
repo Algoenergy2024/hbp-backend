@@ -67,16 +67,24 @@
       <nav class="tabs">
         <button class="tab-btn is-active" data-tab="explorer" type="button">Price Explorer</button>
         <button class="tab-btn" data-tab="comparison" type="button">Pathway Comparison</button>
+        <button class="tab-btn" data-tab="sensitivity" type="button">Sensitivity</button>
+        <button class="tab-btn" data-tab="portfolio" type="button">Portfolio Blend</button>
         <button class="tab-btn" data-tab="workspace" type="button">Project Workspace</button>
       </nav>
 
       <section id="panel-explorer">
         <div class="card">
-          <p class="card-title" id="explorerTitle">—</p>
-          <p class="card-sub" id="explorerSub">—</p>
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+            <div>
+              <p class="card-title" id="explorerTitle">—</p>
+              <p class="card-sub" id="explorerSub">—</p>
+            </div>
+            <button class="btn" type="button" id="explorerPngBtn">Save PNG</button>
+          </div>
           <div class="kpi-row" id="explorerKpis"></div>
           <div class="breakdown-bar" id="breakdownBar"></div>
           <div class="breakdown-legend" id="breakdownLegend"></div>
+          <div id="diurnalChartWrap" style="margin-top:16px;"></div>
         </div>
       </section>
 
@@ -97,6 +105,28 @@
         </div>
       </section>
 
+      <section id="panel-sensitivity" hidden>
+        <div class="card">
+          <p class="card-title">Sensitivity — <span id="sensPathwayLabel"></span></p>
+          <p class="card-sub" id="sensSub">±30% market swing, ±20% capex swing</p>
+          <div id="tornadoWrap"></div>
+        </div>
+      </section>
+
+      <section id="panel-portfolio" hidden>
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div>
+              <p class="card-title">Blend projects into one delivered price</p>
+              <p class="card-sub">Mix any saved projects by weight — weights normalise automatically.</p>
+            </div>
+            <button class="btn" type="button" id="portfolioAddRowBtn">+ Add row</button>
+          </div>
+          <div id="portfolioRows"></div>
+          <div class="kpi-row" id="portfolioKpis" style="margin-top:14px;"></div>
+        </div>
+      </section>
+
       <section id="panel-workspace" hidden>
         <div class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
@@ -104,12 +134,32 @@
               <p class="card-title">Projects — <span id="workspacePathwayLabel"></span></p>
               <p class="card-sub">Every fundamental cost is editable and saved to your account.</p>
             </div>
-            <button class="btn primary" type="button" id="addProjectBtn">+ Add project</button>
+            <div style="display:flex; gap:8px;">
+              <button class="btn" type="button" id="exportCsvBtn">Export CSV</button>
+              <button class="btn primary" type="button" id="addProjectBtn">+ Add project</button>
+            </div>
           </div>
           <p class="error-text" id="workspaceError"></p>
           <div style="overflow-x:auto;">
             <table class="proj-table" id="projectsTable"></table>
           </div>
+        </div>
+
+        <div class="card">
+          <p class="card-title">Project stress test</p>
+          <p class="card-sub">Pick a project to sweep its inputs one at a time, or two at once.</p>
+          <div class="field" style="max-width:320px;">
+            <label>Project</label>
+            <select id="stressProjectSelect"></select>
+          </div>
+          <div id="stressTornadoWrap"></div>
+          <hr style="border:none;border-top:1px solid var(--border);margin:18px 0;" />
+          <p class="card-sub" style="margin-bottom:10px;">Two-variable heatmap</p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+            <div class="field" style="width:160px;"><label>Row variable</label><select id="heatmapRowField"></select></div>
+            <div class="field" style="width:160px;"><label>Column variable</label><select id="heatmapColField"></select></div>
+          </div>
+          <div id="heatmapWrap" style="overflow-x:auto;"></div>
         </div>
       </section>
     </main>

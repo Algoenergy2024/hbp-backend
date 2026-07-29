@@ -6,7 +6,7 @@ import { pool } from "./pool.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDir = path.join(__dirname, "migrations");
 
-async function run() {
+export async function runMigrations(): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name TEXT PRIMARY KEY,
@@ -44,10 +44,19 @@ async function run() {
   }
 
   console.log("Migrations complete.");
-  await pool.end();
 }
 
-run().catch(err => {
-  console.error("Migration failed:", err);
-  process.exit(1);
-});
+// Only run standalone (and only then close the shared pool) when this file
+// is executed directly — e.g. `npm run migrate` for local dev. When
+// imported by index.ts to run migrations automatically on server startup,
+// runMigrations() is just an awaited function call against the pool the
+// rest of the app keeps using.
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+if (isMain) {
+  runMigrations()
+    .then(() => pool.end())
+    .catch(err => {
+      console.error("Migration failed:", err);
+      process.exit(1);
+    });
+}

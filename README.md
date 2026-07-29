@@ -13,9 +13,13 @@ Requires Node 20+ and a local Postgres.
 ```bash
 cp .env.example .env        # edit DATABASE_URL if needed
 npm install
-npm run migrate              # creates tables
 npm run dev                  # starts the API + web console on :4000
 ```
+
+The server creates and migrates its own tables on startup (`runMigrations()`
+in `src/index.ts`) — there's no separate setup step to remember. `npm run
+migrate` still exists if you want to apply migrations without booting the
+server (e.g. in a script), but it's optional, not required.
 
 Open `http://localhost:4000` — that's the actual console now, not the
 standalone artifact. Register an account, and you're in.
@@ -26,11 +30,8 @@ standalone artifact. Register an account, and you're in.
 docker compose up --build
 ```
 
-Runs Postgres + the API together. Run migrations once the containers are up:
-
-```bash
-docker compose exec api npm run migrate
-```
+That's it — no second command. The API container migrates and seeds its
+own database on boot before it starts listening, same as local dev.
 
 ## Testing
 

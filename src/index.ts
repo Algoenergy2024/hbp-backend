@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { startMarketDataScheduler } from "./data/scheduler.js";
+import { runMigrations } from "./db/migrate.js";
 import { loadActiveAssumptions, seedAssumptionsIfEmpty } from "./pricing/assumptionsStore.js";
 import assumptionsRoutes from "./routes/assumptions.js";
 import authRoutes from "./routes/auth.js";
@@ -46,6 +47,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 async function start() {
+  await runMigrations();
   const seeded = await seedAssumptionsIfEmpty();
   if (seeded > 0) console.log(`[assumptions] seeded ${seeded} rows from dashboard calibration defaults`);
   await loadActiveAssumptions();

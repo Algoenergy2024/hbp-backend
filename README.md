@@ -73,10 +73,10 @@ port before it reaches an API response.
 |---|---|---|
 | `GET /api/pathways` | none | Pathway/delivery-point/year enum |
 | `GET /api/pathways/delivery-points` | none | Full delivery-point detail (mode, adders, caveat) |
-| `GET /api/pathways/:pathway/cost?year=&clusterId=&electrolyser=` | none | Cost breakdown, uncertainty band, market sources for one pathway |
-| `GET /api/pathways/compare/:year?clusterId=` | none | All five pathways ranked, same year/delivery point |
-| `GET /api/pathways/:pathway/sensitivity?year=&clusterId=&electrolyser=` | none | One-variable tornado sweep (gas/elec/carbon/nuclear-PPA/capex), computed server-side |
-| `GET /api/market?year=` | none | Resolved market prices for a scenario year, tagged live vs curated per series |
+| `GET /api/pathways/:pathway/cost?year=&clusterId=&electrolyser=&nuclearScenario=` | none | Cost breakdown, uncertainty band, market sources for one pathway (`nuclearScenario` only affects "pink"; `smr` \| `hpc`, default `smr`) |
+| `GET /api/pathways/compare/:year?clusterId=&nuclearScenario=` | none | All five pathways ranked, same year/delivery point |
+| `GET /api/pathways/:pathway/sensitivity?year=&clusterId=&electrolyser=&nuclearScenario=` | none | One-variable tornado sweep (gas/elec/carbon/nuclear-PPA/capex), computed server-side |
+| `GET /api/market?year=&nuclearScenario=` | none | Resolved market prices for a scenario year, tagged live vs curated per series — also returns `nuclearScenarios: { smr, hpc }` with both values side by side |
 | `GET /api/market/observations` | none | Most recent raw observation per live series, for transparency |
 | `POST /api/market/carbon-auction` | admin | Record a new UK ETS auction clearing price (`{ date, clearingPrice }`) — see "Live vs curated data" below |
 | `POST /api/auth/register`, `/login` | none | Email/password auth, returns a JWT |
@@ -127,8 +127,28 @@ before extending this codebase:
   "Record UK ETS auction result" button on the Assumptions tab). Only if
   neither a licensed feed nor a manual entry exists does carbon fall back
   to the curated table.
-- **Nuclear PPA price** is always curated — it has no market feed at all,
-  live or otherwise.
+- **Nuclear PPA price** is always curated — no market feed, live or
+  otherwise, applies to it — but it's a choice between **two curated
+  scenarios**, selectable per request via `?nuclearScenario=smr|hpc`
+  (defaults to `smr`) and, in the UI, via a "Nuclear scenario" toggle that
+  appears only for the pink pathway:
+  - `smr` — an illustrative future low-cost Small Modular Reactor PPA
+    (`MARKET_DEFAULTS.nuclearPPA` in `constants.ts`). A hypothesis, not a
+    signed contract.
+  - `hpc` — Hinkley Point C's real, government-published CfD strike price
+    (`MARKET_DEFAULTS.nuclearPPAHpc`): **£125.96/MWh**, sourced from LCCC's
+    (Low Carbon Contracts Company) own open-data portal at
+    `dp.lowcarboncontracts.uk` — a CKAN instance (same platform as
+    data.gov.uk), queried via CKAN's standard, free, unauthenticated Action
+    API (`/api/3/action/package_show?id=forecast-average-strike-price-and-market-price`).
+    No API key, no login. HPC isn't expected to start generating until
+    FY2029/30, so the strike price has no real value for 2026 yet — that
+    year reuses the `smr` scenario's figure as a placeholder rather than
+    fabricate an HPC number, and both scenarios are identical at 2026 by
+    design. From 2030 onward the two diverge sharply (HPC's real price is
+    roughly double the illustrative SMR guess), which is expected: HPC is
+    an expensive, first-of-a-kind project, not a preview of future cheaper
+    nuclear.
 - **2030/2035/2040/2046 are always curated**, regardless of any of the
   above — they're forward scenarios by definition, not something a live
   feed could ever populate. Only `LIVE_ELIGIBLE_YEAR` (2026) in
@@ -236,7 +256,12 @@ by comparing ids as strings everywhere; worth a second look if a similar
    is live too, but via the manual ICE-auction workflow rather than a real
    connector — worth revisiting if a licensed feed (ICE, Argus/ICIS) is
    ever worth paying for, since the connector shape for it already exists
-   in `src/data/ukets.ts`.
+   in `src/data/ukets.ts`. Nuclear PPA now has a real, sourced number too
+   (Hinkley Point C's actual CfD strike price via LCCC's open data portal),
+   offered as a toggle against the illustrative SMR scenario rather than
+   replacing it outright — worth revisiting once there's more than one real
+   nuclear project to compare it against (Sizewell C, SMRs as they're
+   contracted).
 2. Revisit auth/permissioning once there's a real answer to "who uses this
    and what should they each be able to see" — likely the point at which
    `is_admin` becomes a proper roles table instead of one boolean, and the

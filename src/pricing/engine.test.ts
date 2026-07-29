@@ -99,3 +99,30 @@ describe("pricing engine parity with dashboard calibration", () => {
     expect(r2026Road.total - r2026Pipe.total).toBeCloseTo(1.2, 5);
   });
 });
+
+describe("nuclear PPA scenarios (SMR vs Hinkley Point C actual)", () => {
+  it("every HPC-scenario year has a positive, well-formed price", () => {
+    for (const year of YEARS) {
+      expect(MARKET_DEFAULTS.nuclearPPAHpc[year]).toBeGreaterThan(0);
+    }
+  });
+
+  it("2026 is identical between scenarios (HPC isn't generating yet)", () => {
+    expect(MARKET_DEFAULTS.nuclearPPAHpc[2026]).toBe(MARKET_DEFAULTS.nuclearPPA[2026]);
+  });
+
+  it("HPC's real contracted price is materially higher than the SMR forecast from 2030 on", () => {
+    for (const year of [2030, 2035, 2040, 2046] as const) {
+      expect(MARKET_DEFAULTS.nuclearPPAHpc[year]).toBeGreaterThan(MARKET_DEFAULTS.nuclearPPA[year]);
+    }
+  });
+
+  it("pinkCost under the HPC scenario is materially more expensive than under SMR", () => {
+    const smrMarket = marketFor(2035);
+    const hpcMarket = { ...smrMarket, nuclearPPA: MARKET_DEFAULTS.nuclearPPAHpc[2035] };
+    const smrResult = pinkCost(smrMarket, 2035, "ROAD");
+    const hpcResult = pinkCost(hpcMarket, 2035, "ROAD");
+    expect(hpcResult.total).toBeGreaterThan(smrResult.total);
+    expect(hpcResult.energy).toBeCloseTo(smrResult.energy * (MARKET_DEFAULTS.nuclearPPAHpc[2035] / MARKET_DEFAULTS.nuclearPPA[2035]), 5);
+  });
+});

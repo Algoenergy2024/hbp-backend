@@ -32,10 +32,16 @@
     year: 2026,
     clusterId: "ROAD",
     electrolyser: "PEM",
+    nuclearScenario: "smr",
     tab: "explorer",
     clusters: null,
     projects: [],
     user: null
+  };
+
+  var NUCLEAR_SCENARIO_META = {
+    smr: { label: "SMR (future)", note: "Illustrative future low-cost Small Modular Reactor PPA — a hypothesis, not a signed contract." },
+    hpc: { label: "Hinkley Point C (actual)", note: "Hinkley Point C's real, government-published CfD strike price (~£125.96/MWh, LCCC). Not generating until ~2029/30, so 2026 reuses the SMR figure as a placeholder." }
   };
 
   // ---------------- API client ----------------
@@ -176,6 +182,23 @@
       btn.addEventListener("click", function () { state.electrolyser = tech; renderAll(); });
       el.appendChild(btn);
     });
+  }
+
+  function renderNuclearScenarioChips() {
+    var group = document.getElementById("nuclearScenarioGroup");
+    group.hidden = state.pathway !== "pink";
+    if (state.pathway !== "pink") return;
+    var el = document.getElementById("nuclearScenarioChips");
+    el.innerHTML = "";
+    ["smr", "hpc"].forEach(function (scenario) {
+      var btn = document.createElement("button");
+      btn.className = "chip-btn" + (scenario === state.nuclearScenario ? " is-active" : "");
+      btn.type = "button";
+      btn.textContent = NUCLEAR_SCENARIO_META[scenario].label;
+      btn.addEventListener("click", function () { state.nuclearScenario = scenario; renderAll(); });
+      el.appendChild(btn);
+    });
+    document.getElementById("nuclearScenarioNote").textContent = NUCLEAR_SCENARIO_META[state.nuclearScenario].note;
   }
 
   function renderClusterChips() {
@@ -366,7 +389,7 @@
   }
 
   function renderExplorer() {
-    var params = new URLSearchParams({ year: state.year, clusterId: state.clusterId, electrolyser: state.electrolyser });
+    var params = new URLSearchParams({ year: state.year, clusterId: state.clusterId, electrolyser: state.electrolyser, nuclearScenario: state.nuclearScenario });
     api("/api/pathways/" + state.pathway + "/cost?" + params.toString()).then(function (data) {
       var meta = PATHWAY_META[state.pathway];
       document.getElementById("explorerTitle").textContent = meta.name + " — " + meta.sub;
@@ -410,7 +433,7 @@
   // ---------------- Comparison ----------------
 
   function renderComparison() {
-    api("/api/pathways/compare/" + state.year + "?clusterId=" + state.clusterId).then(function (data) {
+    api("/api/pathways/compare/" + state.year + "?clusterId=" + state.clusterId + "&nuclearScenario=" + state.nuclearScenario).then(function (data) {
       document.getElementById("comparisonSub").textContent = state.year + " scenario · " + CLUSTER_SHORT[state.clusterId];
       var list = document.getElementById("rankList");
       list.innerHTML = "";
@@ -466,7 +489,7 @@
 
   function renderSensitivity() {
     document.getElementById("sensPathwayLabel").textContent = PATHWAY_META[state.pathway].name;
-    var params = new URLSearchParams({ year: state.year, clusterId: state.clusterId, electrolyser: state.electrolyser });
+    var params = new URLSearchParams({ year: state.year, clusterId: state.clusterId, electrolyser: state.electrolyser, nuclearScenario: state.nuclearScenario });
     api("/api/pathways/" + state.pathway + "/sensitivity?" + params.toString()).then(function (data) {
       document.getElementById("sensSub").textContent =
         "±30% market swing, ±20% capex swing · " + state.year + " scenario · baseline £" + data.baseline.toFixed(2) + "/kg shown as vertical marker";
@@ -658,7 +681,7 @@
     errorEl.textContent = "";
     api("/api/projects", {
       method: "POST",
-      body: JSON.stringify({ pathway: state.pathway, year: state.year, electrolyser: state.electrolyser, clusterId: state.clusterId })
+      body: JSON.stringify({ pathway: state.pathway, year: state.year, electrolyser: state.electrolyser, clusterId: state.clusterId, nuclearScenario: state.nuclearScenario })
     })
       .then(function (created) {
         state.projects.push(created);
@@ -901,7 +924,7 @@
     return n;
   }
 
-  var MARKET_SERIES_LABELS = { gasPrice: "Gas", gridElec: "Grid electricity", nuclearPPA: "Nuclear PPA", carbonPrice: "Carbon (UK ETS)" };
+  var MARKET_SERIES_LABELS = { gasPrice: "Gas", gridElec: "Grid electricity", carbonPrice: "Carbon (UK ETS)" };
 
   function renderMarketDataStatus() {
     var list = document.getElementById("marketDataStatus");
@@ -917,6 +940,14 @@
           " (" + (isLive ? data.sources[key] : "curated") + ")";
         list.appendChild(li);
       });
+      if (data.nuclearScenarios) {
+        var smrLi = document.createElement("li");
+        smrLi.textContent = "Nuclear PPA — SMR (future): " + money(data.nuclearScenarios.smr.value) + " (curated)";
+        list.appendChild(smrLi);
+        var hpcLi = document.createElement("li");
+        hpcLi.textContent = "Nuclear PPA — Hinkley Point C (actual): " + money(data.nuclearScenarios.hpc.value) + " (" + data.nuclearScenarios.hpc.source + ")";
+        list.appendChild(hpcLi);
+      }
     }).catch(function () { list.innerHTML = "<li>Could not load market data.</li>"; });
   }
 
@@ -1060,6 +1091,7 @@
     renderPathwayList();
     renderYearChips();
     renderElectrolyserChips();
+    renderNuclearScenarioChips();
     renderClusterChips();
     renderActiveTab();
   }

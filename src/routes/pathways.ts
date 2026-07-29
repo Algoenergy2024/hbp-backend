@@ -11,7 +11,11 @@ const querySchema = z.object({
     message: `year must be one of ${YEARS.join(", ")}`
   }),
   clusterId: z.enum(CLUSTER_ORDER).default("ROAD"),
-  electrolyser: z.enum(["PEM", "AEL", "SOE"]).default("PEM")
+  electrolyser: z.enum(["PEM", "AEL", "SOE"]).default("PEM"),
+  // Only the "pink" pathway reads market.nuclearPPA — see getMarketPrices()
+  // for what each scenario means. Harmless to accept on every route since
+  // every other pathway's cost formula ignores it.
+  nuclearScenario: z.enum(["smr", "hpc"]).default("smr")
 });
 
 router.get("/", (_req, res) => {
@@ -38,9 +42,9 @@ router.get("/:pathway/cost", async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid query parameters" });
     return;
   }
-  const { year, clusterId, electrolyser } = parsed.data;
+  const { year, clusterId, electrolyser, nuclearScenario } = parsed.data;
 
-  const { prices, sources } = await getMarketPrices(year);
+  const { prices, sources } = await getMarketPrices(year, nuclearScenario);
   const breakdown = pathwayCost(pathway, prices, year, clusterId, electrolyser);
   const uncertainty = UNCERTAINTY_PCT[pathway];
 
@@ -88,8 +92,8 @@ router.get("/:pathway/sensitivity", async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid query parameters" });
     return;
   }
-  const { year, clusterId, electrolyser } = parsed.data;
-  const { prices } = await getMarketPrices(year);
+  const { year, clusterId, electrolyser, nuclearScenario } = parsed.data;
+  const { prices } = await getMarketPrices(year, nuclearScenario);
   const baseline = pathwayCost(pathway, prices, year, clusterId, electrolyser).total;
   const baseCapex = baseCapexFor(pathway, year, electrolyser);
 
@@ -126,16 +130,17 @@ router.get("/:pathway/sensitivity", async (req, res) => {
 });
 
 router.get("/compare/:year", async (req, res) => {
-  const parsed = querySchema.pick({ year: true, clusterId: true }).safeParse({
+  const parsed = querySchema.pick({ year: true, clusterId: true, nuclearScenario: true }).safeParse({
     year: req.params.year,
-    clusterId: req.query.clusterId
+    clusterId: req.query.clusterId,
+    nuclearScenario: req.query.nuclearScenario
   });
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid parameters" });
     return;
   }
-  const { year, clusterId } = parsed.data;
-  const { prices, sources } = await getMarketPrices(year);
+  const { year, clusterId, nuclearScenario } = parsed.data;
+  const { prices, sources } = await getMarketPrices(year, nuclearScenario);
 
   const results = PATHWAY_ORDER.map(pathway => {
     const breakdown = pathwayCost(pathway, prices, year, clusterId, "PEM");

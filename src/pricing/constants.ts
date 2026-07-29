@@ -87,9 +87,24 @@ export const CLUSTERS: Record<ClusterId, DeliveryPoint> = {
 export const MARKET_DEFAULTS = {
   gasAvg: { 2026: 28, 2030: 29, 2035: 31, 2040: 34, 2046: 36 } as YearRecord,
   gridElecAvg: { 2026: 95, 2030: 68, 2035: 58, 2040: 50, 2046: 42 } as YearRecord,
+  // Illustrative future-SMR (Small Modular Reactor) nuclear PPA scenario —
+  // costs falling as the technology matures. This is a hypothesis, not a
+  // signed contract; see nuclearPPAHpc below for the real one.
   nuclearPPA: { 2026: 60, 2030: 52, 2035: 46, 2040: 42, 2046: 38 } as YearRecord,
+  // Hinkley Point C's actual, government-published CfD strike price —
+  // sourced from LCCC's public open-data portal (dp.lowcarboncontracts.uk,
+  // dataset "Forecast Average Strike Price and Market Price": £125.9561/MWh,
+  // roughly flat, from FY2029/30 - when HPC is expected to start generating
+  // - through the last published year, FY2040/41). 2026 has no real HPC
+  // figure yet since the plant isn't generating; it reuses the SMR
+  // scenario's 2026 value as a placeholder rather than fabricate one — see
+  // README's "Live vs curated data" section. 2046 extrapolates the last
+  // published (flat) year, since LCCC's forecast doesn't extend that far.
+  nuclearPPAHpc: { 2026: 60, 2030: 125.96, 2035: 125.96, 2040: 125.96, 2046: 125.96 } as YearRecord,
   carbon: { 2026: 45, 2030: 70, 2035: 110, 2040: 180, 2046: 230 } as YearRecord
 };
+
+export type NuclearScenario = "smr" | "hpc";
 
 export const GREY = {
   ngKwh: HHV_PER_KG / 0.74,

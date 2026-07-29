@@ -69,7 +69,12 @@ const createSchema = z.object({
   year: z.coerce.number().refine((y): y is Year => (YEARS as readonly number[]).includes(y)),
   electrolyser: z.enum(["PEM", "AEL", "SOE"]).default("PEM"),
   clusterId: z.enum(CLUSTER_ORDER).default("ROAD"),
-  name: z.string().min(1).optional()
+  name: z.string().min(1).optional(),
+  // Only matters for pathway "pink" — see getMarketPrices() for what each
+  // scenario means. The chosen value is snapshotted into elecPrice below;
+  // the project doesn't stay linked to the scenario after creation, same as
+  // every other market price a project captures at creation time.
+  nuclearScenario: z.enum(["smr", "hpc"]).default("smr")
 });
 
 router.post("/", async (req: AuthedRequest, res) => {
@@ -78,8 +83,8 @@ router.post("/", async (req: AuthedRequest, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
     return;
   }
-  const { pathway, year, electrolyser, clusterId, name } = parsed.data;
-  const { prices } = await getMarketPrices(year);
+  const { pathway, year, electrolyser, clusterId, name, nuclearScenario } = parsed.data;
+  const { prices } = await getMarketPrices(year, nuclearScenario);
   const defaults = defaultProjectFor(pathway, year, electrolyser, clusterId, prices);
   const projectName = name ?? `${pathway[0]!.toUpperCase()}${pathway.slice(1)} — ${year}`;
 

@@ -1,5 +1,5 @@
 import { pool } from "../db/pool.js";
-import { MARKET_DEFAULTS, type Year } from "../pricing/constants.js";
+import { MARKET_DEFAULTS, type NuclearScenario, type Year } from "../pricing/constants.js";
 import type { MarketPrices } from "../pricing/engine.js";
 import { fetchElexonDailyAveragePrice } from "./elexon.js";
 import { fetchNationalGasDailyPrice } from "./nationalgas.js";
@@ -62,12 +62,19 @@ export interface MarketPriceSources {
 
 /**
  * Resolves the market prices the pricing engine needs for a given scenario
- * year, preferring a fresh live observation (electricity, carbon — only for
- * the current scenario year) and falling back to the curated table for
+ * year, preferring a fresh live observation (electricity, gas, carbon — only
+ * for the current scenario year) and falling back to the curated table for
  * everything else, including every forward year by design.
+ *
+ * Nuclear PPA has no live feed either way (no automatic connector, no manual
+ * entry workflow) — it's a choice between two curated scenarios: "smr" (an
+ * illustrative future low-cost SMR PPA) or "hpc" (Hinkley Point C's real,
+ * government-published CfD strike price — see nuclearPPAHpc in constants.ts
+ * for the source). Defaults to "smr" to keep existing callers unchanged.
  */
 export async function getMarketPrices(
-  year: Year
+  year: Year,
+  nuclearScenario: NuclearScenario = "smr"
 ): Promise<{ prices: MarketPrices; sources: MarketPriceSources }> {
   let gasPrice = MARKET_DEFAULTS.gasAvg[year];
   let gasSource = "curated";
@@ -75,6 +82,9 @@ export async function getMarketPrices(
   let gridElecSource = "curated";
   let carbonPrice = MARKET_DEFAULTS.carbon[year];
   let carbonSource = "curated";
+  const nuclearPPA =
+    nuclearScenario === "hpc" ? MARKET_DEFAULTS.nuclearPPAHpc[year] : MARKET_DEFAULTS.nuclearPPA[year];
+  const nuclearSource = nuclearScenario === "hpc" ? "curated_lccc_hpc" : "curated";
 
   if (year === LIVE_ELIGIBLE_YEAR) {
     const liveGas = await getLatestObservation("gas_gbp_mwh");
@@ -95,16 +105,11 @@ export async function getMarketPrices(
   }
 
   return {
-    prices: {
-      gasPrice,
-      gridElec,
-      nuclearPPA: MARKET_DEFAULTS.nuclearPPA[year],
-      carbonPrice
-    },
+    prices: { gasPrice, gridElec, nuclearPPA, carbonPrice },
     sources: {
       gasPrice: gasSource,
       gridElec: gridElecSource,
-      nuclearPPA: "curated",
+      nuclearPPA: nuclearSource,
       carbonPrice: carbonSource
     }
   };
